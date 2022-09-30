@@ -43,7 +43,7 @@ SaveHandler::SaveHandler() {
     this->attachBgId = 1;
 }
 
-void SaveHandler::prepareSave(Document* doc, std::filesystem::path& target) {
+void SaveHandler::prepareSave(Document* doc, const std::filesystem::path& target) {
     if (this->root) {
         // cleanup old data
         backgroundImages.clear();
@@ -207,7 +207,7 @@ void SaveHandler::visitLayer(XmlNode* page, Layer* l) {
     }
 }
 
-void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, std::filesystem::path& target) {
+void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, const std::filesystem::path& target) {
     auto* page = new XmlNode("page");
     root->addChild(page);
     page->setAttrib("width", p->getWidth());
