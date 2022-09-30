@@ -137,5 +137,6 @@ auto system_single_byte_filename(const fs::path& path) -> std::string;
 [[maybe_unused]] [[nodiscard]] fs::path getGettextFilepath(const char* localeDir);
 [[maybe_unused]] [[nodiscard]] fs::path getDataPath();
 [[maybe_unused]] [[nodiscard]] fs::path getLocalePath();
+[[maybe_unused]] [[nodiscard]] fs::path getMaybeRelativePath(fs::path const& p, fs::path const& base);
 
 }  // namespace Util
