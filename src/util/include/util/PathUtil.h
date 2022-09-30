@@ -115,6 +115,15 @@ void openFileWithFilebrowser(const fs::path& filename);
 [[maybe_unused]] fs::path ensureFolderExists(const fs::path& p);
 
 /**
+ * A Xournalpp file may include references to other PDF, PNG, etc. files on
+ * disk. Given an .xopp file (which is in directory `base`), this function
+ * attempts to convert `asset_path` to a relative file, relative to `base`.
+ *
+ * If it is unable to create a relative path, it will return an absolute path.
+ */
+[[maybe_unused]] [[nodiscard]] fs::path resolveAssetPath(fs::path const& asset_path, fs::path const& base);
+
+/**
  * Convert to platform compatible path. Call this before
  * passing a path to another program.
  */

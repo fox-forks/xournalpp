@@ -117,3 +117,36 @@ TEST(UtilPath, testClearExtensions) {
     Util::clearExtensions(b);
     EXPECT_EQ(string("/test/asdf.pdf"), b.string());
 }
+
+TEST(UtilPath, resolveAssetPath) {
+    auto p = fs::path();
+
+#if _WIN32
+    // if older absolute paths are opened
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "D:");
+    EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
+
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "D:\\base");
+    EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
+
+    // do not return empty if asset_path is relative
+    p = Util::resolveAssetPath("../dir/file.txt", "D:");
+    EXPECT_TRUE(!p.empty());
+
+    p = Util::resolveAssetPath("../dir/file.txt", "D:\\base");
+    EXPECT_TRUE(!p.empty());
+#else
+    p = Util::resolveAssetPath("/dir/file.txt", "/");
+    EXPECT_EQ(string("dir/file.txt"), p.string());
+
+    p = Util::resolveAssetPath("/dir/file.txt", "/base");
+    EXPECT_EQ(string("../dir/file.txt"), p.string());
+
+    // do not return empty if asset_path is relative
+    p = Util::resolveAssetPath("../dir/file.txt", "/");
+    EXPECT_TRUE(!p.empty());
+
+    p = Util::resolveAssetPath("../dir/file.txt", "/base");
+    EXPECT_TRUE(!p.empty());
+#endif
+}

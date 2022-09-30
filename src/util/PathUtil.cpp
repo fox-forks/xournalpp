@@ -313,6 +313,30 @@ bool Util::safeRenameFile(fs::path const& from, fs::path const& to) {
     return true;
 }
 
+auto Util::resolveAssetPath(fs::path const& asset_path, fs::path const& base) -> fs::path {
+    auto final_path = fs::path{};
+
+#ifdef _WIN32
+    // On Windows, fs::relative may return an empty or malformed path if the
+    // the root_path()s are different
+    if (asset_path.root_path() == base.root_path()) {
+        final_path = fs::relative(asset_path, base);
+    }
+#else
+    // With other platforms, the root is always '/', so a relative path can
+    // always be correctly constructed
+    final_path = fs::relative(asset_path, base);
+#endif
+
+    // In some cases (if `asset_path` is a relative path), `final_path` may be
+    // empty, so ensure that a valid path is always returned from this function
+    if (final_path.empty())
+        final_path = fs::weakly_canonical(asset_path);
+
+    return final_path;
+}
+
+
 auto Util::getDataPath() -> fs::path {
 #ifdef _WIN32
     TCHAR szFileName[MAX_PATH];
