@@ -43,7 +43,7 @@ SaveHandler::SaveHandler() {
     this->attachBgId = 1;
 }
 
-void SaveHandler::prepareSave(Document* doc) {
+void SaveHandler::prepareSave(Document* doc, std::filesystem::path& target) {
     if (this->root) {
         // cleanup old data
         backgroundImages.clear();
@@ -70,7 +70,7 @@ void SaveHandler::prepareSave(Document* doc) {
 
     for (size_t i = 0; i < doc->getPageCount(); i++) {
         PageRef p = doc->getPage(i);
-        visitPage(root.get(), p, doc, static_cast<int>(i));
+        visitPage(root.get(), p, doc, static_cast<int>(i), target);
     }
 }
 
@@ -207,7 +207,7 @@ void SaveHandler::visitLayer(XmlNode* page, Layer* l) {
     }
 }
 
-void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id) {
+void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, std::filesystem::path& target) {
     auto* page = new XmlNode("page");
     root->addChild(page);
     page->setAttrib("width", p->getWidth());
@@ -251,7 +251,8 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id) {
                 }
             } else {
                 background->setAttrib("domain", "absolute");
-                background->setAttrib("filename", doc->getPdfFilepath().string());
+                auto file = std::filesystem::relative(std::filesystem::current_path() / doc->getPdfFilepath().string(), target.parent_path());
+                background->setAttrib("filename", file);
             }
         }
         background->setAttrib("pageno", p->getPdfPageNr() + 1);
@@ -276,7 +277,8 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id) {
             p->getBackgroundImage().setCloneId(id);
         } else {
             background->setAttrib("domain", "absolute");
-            background->setAttrib("filename", p->getBackgroundImage().getFilepath().string());
+            auto file = std::filesystem::relative(std::filesystem::current_path() / p->getBackgroundImage().getFilepath().string(), target.parent_path());
+            background->setAttrib("filename", file);
             p->getBackgroundImage().setCloneId(id);
         }
     } else {
