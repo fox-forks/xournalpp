@@ -344,3 +344,25 @@ auto Util::getLocalePath() -> fs::path {
     return getDataPath() / ".." / "locale";
 #endif
 }
+
+auto Util::getMaybeRelativePath(fs::path const& fullpath, fs::path const& base) -> fs::path {
+    auto relpath = fs::path{};
+
+#ifdef _WIN32
+    // On Windows, fs::relative may return an empty or malformed path if the
+    // the root_path()s are different
+    if (fullpath.root_path() == base.root_path()) {
+        relpath = fs::relative(fullpath, base);
+    }
+#else
+    // With other platforms, the root is always '/', so a relative path can
+    // always be correctly constructed
+    relpath = fs::relative(fullpath, base);
+#endif
+
+    // Mixed paths (C:\\dir\file.txt and /dir2)
+    if (relpath.empty())
+        relpath = fs::weakly_canonical(fullpath);
+
+    return relpath;
+}
