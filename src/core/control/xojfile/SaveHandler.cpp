@@ -252,7 +252,7 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, con
             } else {
                 background->setAttrib("domain", "absolute");
                 auto file = std::filesystem::relative(std::filesystem::current_path() / doc->getPdfFilepath().string(), target.parent_path());
-                background->setAttrib("filename", file);
+                background->setAttrib("filename", file.string());
             }
         }
         background->setAttrib("pageno", p->getPdfPageNr() + 1);
@@ -278,7 +278,7 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, con
         } else {
             background->setAttrib("domain", "absolute");
             auto file = std::filesystem::relative(std::filesystem::current_path() / p->getBackgroundImage().getFilepath().string(), target.parent_path());
-            background->setAttrib("filename", file);
+            background->setAttrib("filename", file.string());
             p->getBackgroundImage().setCloneId(id);
         }
     } else {
