@@ -43,16 +43,19 @@ static GdkAtom atomXournal = gdk_atom_intern_static_string("application/xournal"
 
 auto ClipboardHandler::paste() -> bool {
     if (this->containsXournal) {
+        std::cout << "copynig xournal\n";
         gtk_clipboard_request_contents(this->clipboard, atomXournal,
                                        reinterpret_cast<GtkClipboardReceivedFunc>(pasteClipboardContents), this);
         return true;
     }
     if (this->containsText) {
+        std::cout << "copying text\n";
         gtk_clipboard_request_text(this->clipboard, reinterpret_cast<GtkClipboardTextReceivedFunc>(pasteClipboardText),
                                    this);
         return true;
     }
     if (this->containsImage) {
+        std::cout << "copying image\n";
         gtk_clipboard_request_image(this->clipboard,
                                     reinterpret_cast<GtkClipboardImageReceivedFunc>(pasteClipboardImage), this);
         return true;

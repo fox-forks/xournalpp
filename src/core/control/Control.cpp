@@ -2836,8 +2836,6 @@ void Control::clipboardPasteImage(GdkPixbuf* img) {
 }
 
 void Control::clipboardPaste(Element* e) {
-    double x = 0;
-    double y = 0;
     auto pageNr = getCurrentPageNo();
     if (pageNr == npos) {
         return;
@@ -2851,18 +2849,14 @@ void Control::clipboardPaste(Element* e) {
     this->doc->lock();
     PageRef page = this->doc->getPage(pageNr);
     Layer* layer = page->getSelectedLayer();
-    win->getXournal()->getPasteTarget(x, y);
-
-    double width = e->getElementWidth();
-    double height = e->getElementHeight();
-
-    x = std::max(0.0, x - width / 2);
-    y = std::max(0.0, y - height / 2);
-
+    
+    double x = std::max(0.0, e->getX() + 80);
+    double y = std::max(0.0, e->getY() + 80);
+    std::cout << "oldX: " << e->getX() << '\n';
+    std::cout << "newX: " << x << '\n';
     e->setX(x);
     e->setY(y);
     layer->addElement(e);
-
     this->doc->unlock();
 
     undoRedo->addUndoAction(std::make_unique<InsertUndoAction>(page, layer, e));
@@ -2928,25 +2922,14 @@ void Control::clipboardPasteXournal(ObjectInputStream& in) {
             // Todo: unique_ptr
             selection->addElement(element.release(), Element::InvalidIndex);
         }
-        undoRedo->addUndoAction(std::move(pasteAddUndoAction));
+        undoRedo->addUndoAction(std::move(pasteAddUndoAction));        
 
-        double x = 0;
-        double y = 0;
-        // calculate x/y of paste target, see clipboardPaste(Element* e)
-        win->getXournal()->getPasteTarget(x, y);
-
-        x = std::max(0.0, x - selection->getWidth() / 2);
-        y = std::max(0.0, y - selection->getHeight() / 2);
-
-        // calculate difference between current selection position and destination
-        auto dx = x - selection->getXOnView();
-        auto dy = y - selection->getYOnView();
-
-        selection->moveSelection(dx, dy);
+        selection->moveSelection(40, 40);
         // update all Elements (same procedure as moving a element selection by hand and releasing the mouse button)
         selection->mouseUp();
 
         win->getXournal()->setSelection(selection);
+        copy();
     } catch (std::exception& e) {
         g_warning("could not paste, Exception occurred: %s", e.what());
         Stacktrace::printStracktrace();
