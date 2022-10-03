@@ -98,11 +98,11 @@ auto SaveJob::save() -> bool {
     Document* doc = this->control->getDocument();
     SaveHandler h;
 
+    doc->lock();
     fs::path filepath = doc->getFilepath();
     Util::clearExtensions(filepath, ".pdf");
     auto const target = fs::path{filepath}.concat(".xopp");
 
-    doc->lock();
     h.prepareSave(doc, target);
     doc->unlock();
 

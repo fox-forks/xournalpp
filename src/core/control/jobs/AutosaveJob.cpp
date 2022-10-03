@@ -30,6 +30,7 @@ void AutosaveJob::run() {
 
     Document* doc = control->getDocument();
 
+    doc->lock();
     auto filepath = doc->getFilepath();
 
     if (filepath.empty()) {
@@ -40,7 +41,7 @@ void AutosaveJob::run() {
     Util::clearExtensions(filepath);
     filepath += ".autosave.xopp";
 
-    doc->lock();
+    
     handler.prepareSave(doc, filepath);
     doc->unlock();
     
