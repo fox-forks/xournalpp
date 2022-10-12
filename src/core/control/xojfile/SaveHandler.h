@@ -57,6 +57,7 @@ protected:
     virtual void writeSolidBackground(XmlNode* background, PageRef p);
     virtual void writeTimestamp(AudioElement* audioElement, XmlAudioNode* xmlAudioNode);
     virtual void writeBackgroundName(XmlNode* background, PageRef p);
+    virtual void writeMeta(XmlNode* background, Document *doc);
 
 protected:
     std::unique_ptr<XmlNode> root{};

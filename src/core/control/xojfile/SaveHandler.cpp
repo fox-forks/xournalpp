@@ -63,6 +63,10 @@ void SaveHandler::prepareSave(Document* doc) {
         this->root->addChild(image);
     }
 
+    auto meta = new XmlNode("meta");
+    writeMeta(meta, doc);
+    this->root->addChild(meta);
+
     for (size_t i = 0; i < doc->getPageCount(); i++) {
         PageRef p = doc->getPage(i);
         p->getBackgroundImage().clearSaveState();
@@ -215,7 +219,6 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id) {
 
     auto* background = new XmlNode("background");
     page->addChild(background);
-
     writeBackgroundName(background, p);
 
     if (p->getBackgroundType().isPdfPage()) {
@@ -327,6 +330,11 @@ void SaveHandler::writeBackgroundName(XmlNode* background, PageRef p) {
     if (p->backgroundHasName()) {
         background->setAttrib("name", p->getBackgroundName());
     }
+}
+
+void SaveHandler::writeMeta(XmlNode *meta, Document *doc) {
+    meta->setAttrib("fontSize", doc->);
+    meta->setAttrib("fontFamily", std::string("Arial"));
 }
 
 void SaveHandler::saveTo(const fs::path& filepath, ProgressListener* listener) {
