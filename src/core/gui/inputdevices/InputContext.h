@@ -22,7 +22,7 @@
 
 #include "gui/widgets/XournalWidget.h"  // for GtkXournal
 
-class SetsquareInputHandler;
+class GeometryToolInputHandler;
 class KeyboardInputHandler;
 class MouseInputHandler;
 class ScrollHandling;
@@ -37,12 +37,12 @@ class InputContext {
 
 private:
     gulong signal_id{0};
-    std::unique_ptr<SetsquareInputHandler> setsquareHandler;
     StylusInputHandler* stylusHandler;
     MouseInputHandler* mouseHandler;
     TouchDrawingInputHandler* touchDrawingHandler;
     KeyboardInputHandler* keyboardHandler;
     TouchInputHandler* touchHandler;
+    std::unique_ptr<GeometryToolInputHandler> geometryToolInputHandler;
 
     GtkWidget* widget = nullptr;
     XournalView* view;
@@ -96,6 +96,8 @@ public:
     ToolHandler* getToolHandler();
     Settings* getSettings();
     ScrollHandling* getScrollHandling();
+    void setGeometryToolInputHandler(std::unique_ptr<GeometryToolInputHandler> handler);
+    void resetGeometryToolInputHandler();
 
     GdkModifierType getModifierState();
     void focusWidget();

@@ -1,20 +1,28 @@
 #include "PageView.h"
 
 #include <algorithm>  // for max, find_if
+#include <cassert>    // for assert
+#include <cinttypes>  // for int64_t
 #include <cmath>      // for lround
 #include <cstdlib>    // for size_t
-#include <memory>     // for __shared_ptr_access
+#include <iomanip>    // for operator<<, quoted
+#include <memory>     // for unique_ptr, make_...
 #include <optional>   // for optional
+#include <sstream>    // for operator<<, basic...
+#include <tuple>      // for tuple, tie
 #include <utility>    // for move
 
 #include <gdk/gdk.h>         // for GdkRectangle, Gdk...
 #include <gdk/gdkkeysyms.h>  // for GDK_KEY_Escape
-#include <glib.h>            // for gint, g_get_curre...
-#include <gtk/gtk.h>         // for gtk_widget_get_to...
+#include <glib-object.h>     // for G_CALLBACK, g_sig...
+#include <glib.h>            // for gint, g_free, g_g...
+#include <gtk/gtk.h>         // for GtkWidget, gtk_co...
 
 #include "control/AudioController.h"                // for AudioController
 #include "control/Control.h"                        // for Control
+#include "control/ScrollHandler.h"                  // for ScrollHandler
 #include "control/SearchControl.h"                  // for SearchControl
+#include "control/Tool.h"                           // for Tool
 #include "control/ToolEnums.h"                      // for DRAWING_TYPE_SPLINE
 #include "control/ToolHandler.h"                    // for ToolHandler
 #include "control/jobs/XournalScheduler.h"          // for XournalScheduler
@@ -30,11 +38,10 @@
 #include "control/tools/PdfElemSelection.h"         // for PdfElemSelection
 #include "control/tools/RectangleHandler.h"         // for RectangleHandler
 #include "control/tools/RulerHandler.h"             // for RulerHandler
-#include "control/tools/Selection.h"                // for Selection, RectSe...
+#include "control/tools/Selection.h"                // for RectSelection
 #include "control/tools/SplineHandler.h"            // for SplineHandler
 #include "control/tools/StrokeHandler.h"            // for StrokeHandler
 #include "control/tools/VerticalToolHandler.h"      // for VerticalToolHandler
-#include "control/zoom/ZoomControl.h"               // for ZoomControl
 #include "gui/FloatingToolbox.h"                    // for FloatingToolbox
 #include "gui/MainWindow.h"                         // for MainWindow
 #include "gui/PdfFloatingToolbox.h"                 // for PdfFloatingToolbox
@@ -42,13 +49,16 @@
 #include "gui/inputdevices/PositionInputData.h"     // for PositionInputData
 #include "model/Document.h"                         // for Document
 #include "model/Element.h"                          // for Element, ELEMENT_...
-#include "model/Layer.h"                            // for Layer
+#include "model/Layer.h"                            // for Layer, Layer::Index
+#include "model/LinkDestination.h"                  // for LinkDestination
 #include "model/PageRef.h"                          // for PageRef
 #include "model/Stroke.h"                           // for Stroke
 #include "model/TexImage.h"                         // for TexImage
 #include "model/Text.h"                             // for Text
 #include "model/XojPage.h"                          // for XojPage
-#include "pdf/base/XojPdfPage.h"                    // for XojPdfPageSPtr
+#include "pdf/base/XojPdfAction.h"                  // for XojPdfAction
+#include "pdf/base/XojPdfDocument.h"                // for XojPdfDocument
+#include "pdf/base/XojPdfPage.h"                    // for XojPdfRectangle
 #include "undo/DeleteUndoAction.h"                  // for DeleteUndoAction
 #include "undo/InsertUndoAction.h"                  // for InsertUndoAction
 #include "undo/MoveUndoAction.h"                    // for MoveUndoAction
@@ -59,12 +69,16 @@
 #include "util/Rectangle.h"                         // for Rectangle
 #include "util/Util.h"                              // for npos
 #include "util/XojMsgBox.h"                         // for XojMsgBox
-#include "util/i18n.h"                              // for FS, _, _F
+#include "util/i18n.h"                              // for _F, FC, FS, _
+#include "util/raii/CLibrariesSPtr.h"               // for adopt
+#include "util/serdesstream.h"                      // for serdes_stream
+#include "util/gtk4_helper.h"                       // for gtk_box_append
 #include "view/DebugShowRepaintBounds.h"            // for IF_DEBUG_REPAINT
-#include "view/overlays/OverlayView.h"
-#include "view/overlays/PdfElementSelectionView.h"
-#include "view/overlays/SearchResultView.h"
-#include "view/overlays/ShapeToolView.h"
+#include "view/overlays/OverlayView.h"              // for OverlayView, Tool...
+#include "view/overlays/PdfElementSelectionView.h"  // for PdfElementSelecti...
+#include "view/overlays/SearchResultView.h"         // for SearchResultView
+#include "view/overlays/SelectionView.h"            // for SelectionView
+#include "view/overlays/ShapeToolView.h"            // for ShapeToolView
 
 #include "PageViewFindObjectHelper.h"  // for SelectObject, Pla...
 #include "RepaintHandler.h"            // for RepaintHandler
@@ -72,6 +86,8 @@
 #include "XournalView.h"               // for XournalView
 #include "XournalppCursor.h"           // for XournalppCursor
 #include "filesystem.h"                // for path
+
+class OverlayBase;
 
 using std::string;
 using xoj::util::Rectangle;
@@ -100,6 +116,10 @@ XojPageView::~XojPageView() {
     delete this->eraser;
     endText();
     deleteViewBuffer();  // Ensures the mutex is locked during the buffer's destruction
+}
+
+void XojPageView::addOverlayView(std::unique_ptr<xoj::view::OverlayView> overlay) {
+    this->overlayViews.emplace_back(std::move(overlay));
 }
 
 void XojPageView::setIsVisible(bool visible) {
@@ -671,11 +691,34 @@ auto XojPageView::onButtonReleaseEvent(const PositionInputData& pos) -> bool {
         }
     }
 
+    ToolType toolType = control->getToolHandler()->getActiveTool()->getToolType();
+    if (xoj::tool::isPdfSelectionTool(toolType)) {
+        const double zoom = xournal->getZoom();
+        // Attempt PDF selection
+        auto& pdfDoc = this->xournal->getDocument()->getPdfDocument();
+        if (this->getPage()->getPdfPageNr() != npos) {
+            auto page = pdfDoc.getPage(this->getPage()->getPdfPageNr());
+
+            Layer* layer = this->page->getSelectedLayer();
+            const Layer::Index layerId = this->page->getSelectedLayerId();
+            const bool isBackgroundLayer = (layerId == 0);
+
+            const double pageX = pos.x / zoom;
+            const double pageY = pos.y / zoom;
+
+            // If there's nothing to select (e.g. the background layer)
+            // or we're holding alt...
+            if (isBackgroundLayer || !layer->isAnnotated() || pos.isAltDown()) {
+                displayLinkPopover(page, pageX, pageY);
+            }
+        }
+    }
+
     if (this->selection) {
         if (this->selection->finalize(this->page)) {
             xournal->setSelection(new EditSelection(control->getUndoRedoHandler(), this->selection.get(), this));
         } else {
-            double zoom = xournal->getZoom();
+            const double zoom = xournal->getZoom();
             if (this->selection->userTapped(zoom)) {
                 SelectObject select(this);
                 select.at(pos.x / zoom, pos.y / zoom);
@@ -891,6 +934,94 @@ void XojPageView::drawLoadingPage(cairo_t* cr) {
     cairo_show_text(cr, txtLoading.c_str());
 
     rerenderPage();
+}
+
+bool XojPageView::displayLinkPopover(std::shared_ptr<XojPdfPage> page, double pageX, double pageY) {
+    // Search for selected link
+    const auto links = page->getLinks();
+
+    for (auto&& [rect, action]: links) {
+        std::shared_ptr<const LinkDestination> dest = action->getDestination();
+
+        if (!(rect.x1 <= pageX && pageX <= rect.x2 && rect.y1 <= pageY && pageY <= rect.y2)) {
+            continue;
+        }
+
+        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+        GtkWidget* popover = makePopover(rect, box);
+
+        if (auto uriOpt = dest->getURI()) {
+            const std::string& uri = uriOpt.value();
+            char* uriLabel = g_markup_escape_text(uri.c_str(), -1);
+
+            auto labelMarkup = serdes_stream<std::stringstream>();
+            labelMarkup << "<a href=" << std::quoted(uri) << ">" << uriLabel << "</a>";
+
+            std::string linkMarkup = labelMarkup.str();
+
+            g_free(uriLabel);
+
+            GtkWidget* label = gtk_label_new(nullptr);
+            gtk_label_set_markup(GTK_LABEL(label), linkMarkup.c_str());
+            gtk_box_append(GTK_BOX(box), label);
+        } else {
+            size_t pdfPage = dest->getPdfPage();
+
+            Document* doc = xournal->getControl()->getDocument();
+            doc->lock();
+            const size_t pageId = doc->findPdfPage(pdfPage);
+            doc->unlock();
+
+            GtkWidget* button{};
+            if (pageId != npos) {
+                const auto pageNo = static_cast<int64_t>(pageId + 1);
+                button = gtk_button_new_with_label(FC(_F("Scroll to page {1}") % pageNo));
+            } else {
+                button = gtk_button_new_with_label(FC(_F("Add missing page")));
+            }
+            gtk_box_append(GTK_BOX(box), button);
+
+            g_signal_connect(
+                    button, "clicked",
+                    G_CALLBACK(+[](GtkButton* bt,
+                                   std::tuple<XojPageView*, std::shared_ptr<LinkDestination>, GtkWidget*>* state) {
+                        XojPageView* self;
+                        std::shared_ptr<LinkDestination> dest;
+                        GtkWidget* popover;
+                        std::tie(self, dest, popover) = *state;
+
+                        self->getXournal()->getControl()->getScrollHandler()->scrollToLinkDest(*dest);
+                        gtk_popover_popdown(GTK_POPOVER(popover));
+
+                        delete state;
+                    }),
+                    new std::tuple(std::make_tuple(this, dest, popover)));
+        }
+
+        gtk_widget_show_all(popover);
+        gtk_popover_popup(GTK_POPOVER(popover));
+        return true;
+    }
+
+    return false;
+}
+
+GtkWidget* XojPageView::makePopover(const XojPdfRectangle& rect, GtkWidget* child) {
+    double zoom = xournal->getZoom();
+
+    GtkWidget* popover = gtk_popover_new(this->getXournal()->getWidget());
+    gtk_container_add(GTK_CONTAINER(popover), child);
+
+    auto x = static_cast<int>(this->getX() + rect.x1 * zoom);
+    auto y = static_cast<int>(this->getY() + rect.y1 * zoom);
+    auto w = static_cast<int>((rect.x2 - rect.x1) * zoom);
+    auto h = static_cast<int>((rect.y2 - rect.y1) * zoom);
+
+    GdkRectangle canvasRect{x, y, w, h};
+    gtk_popover_set_pointing_to(GTK_POPOVER(popover), &canvasRect);
+    gtk_popover_set_constrain_to(GTK_POPOVER(popover), GTK_POPOVER_CONSTRAINT_WINDOW);
+
+    return popover;
 }
 
 auto XojPageView::paintPage(cairo_t* cr, GdkRectangle* rect) -> bool {

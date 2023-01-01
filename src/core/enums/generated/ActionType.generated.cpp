@@ -444,6 +444,10 @@ auto ActionType_fromString(const string& value) -> ActionType {
         return ACTION_SETSQUARE;
     }
 
+    if (value == "ACTION_COMPASS") {
+        return ACTION_COMPASS;
+    }
+
     if (value == "ACTION_SELECT_COLOR") {
         return ACTION_SELECT_COLOR;
     }
@@ -522,6 +526,10 @@ auto ActionType_fromString(const string& value) -> ActionType {
 
     if (value == "ACTION_SET_PAIRS_OFFSET") {
         return ACTION_SET_PAIRS_OFFSET;
+    }
+
+    if (value == "ACTION_TOGGLE_PAIRS_PARITY") {
+        return ACTION_TOGGLE_PAIRS_PARITY;
     }
 
     if (value == "ACTION_SET_COLUMNS") {
@@ -1082,6 +1090,10 @@ auto ActionType_toString(ActionType value) -> string {
         return "ACTION_SETSQUARE";
     }
 
+    if (value == ACTION_COMPASS) {
+        return "ACTION_COMPASS";
+    }
+
     if (value == ACTION_SELECT_COLOR) {
         return "ACTION_SELECT_COLOR";
     }
@@ -1160,6 +1172,10 @@ auto ActionType_toString(ActionType value) -> string {
 
     if (value == ACTION_SET_PAIRS_OFFSET) {
         return "ACTION_SET_PAIRS_OFFSET";
+    }
+
+    if (value == ACTION_TOGGLE_PAIRS_PARITY) {
+        return "ACTION_TOGGLE_PAIRS_PARITY";
     }
 
     if (value == ACTION_SET_COLUMNS) {

@@ -36,7 +36,6 @@ class RepaintHandler;
 class ScrollHandling;
 class TextEditor;
 class HandRecognition;
-class SetsquareView;
 namespace xoj::util {
 template <class T>
 class Rectangle;
@@ -91,11 +90,6 @@ public:
     EditSelection* getSelection() const;
     void deleteSelection(EditSelection* sel = nullptr);
     void repaintSelection(bool evenWithoutSelection = false);
-
-    void setSetsquareView(std::unique_ptr<SetsquareView> setsquareView);
-    void resetSetsquareView();
-    SetsquareView* getSetsquareView() const;
-    void repaintSetsquare(bool evenWithoutSetsquare = false);
 
     TextEditor* getTextEditor() const;
     std::vector<XojPageView*> const& getViewPages() const;

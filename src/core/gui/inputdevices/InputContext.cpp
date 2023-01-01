@@ -14,6 +14,7 @@
 #include "control/DeviceListHelper.h"                   // for InputDevice
 #include "control/settings/Settings.h"                  // for Settings
 #include "gui/XournalView.h"                            // for XournalView
+#include "gui/inputdevices/GeometryToolInputHandler.h"  // for GeometryToolInputHandler
 #include "gui/inputdevices/HandRecognition.h"           // for HandRecognition
 #include "gui/inputdevices/KeyboardInputHandler.h"      // for KeyboardInput...
 #include "gui/inputdevices/MouseInputHandler.h"         // for MouseInputHan...
@@ -21,9 +22,8 @@
 #include "gui/inputdevices/TouchDrawingInputHandler.h"  // for TouchDrawingI...
 #include "gui/inputdevices/TouchInputHandler.h"         // for TouchInputHan...
 
-#include "InputEvents.h"            // for InputEvent
-#include "SetsquareInputHandler.h"  // for SetsquareInpu...
-#include "config-debug.h"           // for DEBUG_INPUT
+#include "InputEvents.h"   // for InputEvent
+#include "config-debug.h"  // for DEBUG_INPUT
 
 class ScrollHandling;
 class ToolHandler;
@@ -37,7 +37,6 @@ InputContext::InputContext(XournalView* view, ScrollHandling* scrollHandling) {
     this->touchDrawingHandler = new TouchDrawingInputHandler(this);
     this->mouseHandler = new MouseInputHandler(this);
     this->keyboardHandler = new KeyboardInputHandler(this);
-    this->setsquareHandler = std::make_unique<SetsquareInputHandler>(this);
 
     for (const InputDevice& savedDevices: this->view->getControl()->getSettings()->getKnownInputDevices()) {
         this->knownDevices.insert(savedDevices.getName());
@@ -126,8 +125,8 @@ auto InputContext::handle(GdkEvent* sourceEvent) -> bool {
     this->modifierState = event.state;
 
     // separate events to appropriate handlers
-    // handle setsquare
-    if (this->setsquareHandler->handle(event)) {
+    // handle geometry tool
+    if (geometryToolInputHandler && geometryToolInputHandler->handle(event)) {
         return true;
     }
 
@@ -182,6 +181,12 @@ auto InputContext::getToolHandler() -> ToolHandler* { return view->getControl()-
 
 auto InputContext::getScrollHandling() -> ScrollHandling* { return this->scrollHandling; }
 
+void InputContext::setGeometryToolInputHandler(std::unique_ptr<GeometryToolInputHandler> handler) {
+    this->geometryToolInputHandler = std::move(handler);
+}
+
+void InputContext::resetGeometryToolInputHandler() { this->geometryToolInputHandler.reset(); }
+
 auto InputContext::getModifierState() -> GdkModifierType { return this->modifierState; }
 
 /**
@@ -194,7 +199,9 @@ void InputContext::focusWidget() {
 }
 
 void InputContext::blockDevice(InputContext::DeviceType deviceType) {
-    this->setsquareHandler->blockDevice(deviceType);
+    if (geometryToolInputHandler) {
+        geometryToolInputHandler->blockDevice(deviceType);
+    }
     switch (deviceType) {
         case MOUSE:
             this->mouseHandler->block(true);
@@ -210,7 +217,9 @@ void InputContext::blockDevice(InputContext::DeviceType deviceType) {
 }
 
 void InputContext::unblockDevice(InputContext::DeviceType deviceType) {
-    this->setsquareHandler->unblockDevice(deviceType);
+    if (geometryToolInputHandler) {
+        geometryToolInputHandler->unblockDevice(deviceType);
+    }
     switch (deviceType) {
         case MOUSE:
             this->mouseHandler->block(false);

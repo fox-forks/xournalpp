@@ -1,22 +1,16 @@
 #include "SidebarIndexPage.h"
 
-#include <cstring>  // for size_t, strlen
-#include <memory>   // for __shared_ptr_a...
-#include <utility>  // for move
+#include <cstring>  // for strlen
 
 #include <glib-object.h>  // for g_object_unref
 #include <pango/pango.h>  // for PangoLogAttr
 
 #include "control/Control.h"                           // for Control
 #include "control/ScrollHandler.h"                     // for ScrollHandler
-#include "control/zoom/ZoomControl.h"                  // for ZoomControl
 #include "gui/sidebar/previews/base/SidebarToolbar.h"  // for SidebarToolbar
 #include "model/Document.h"                            // for Document
 #include "model/LinkDestination.h"                     // for XojLinkDest
-#include "model/XojPage.h"                             // for XojPage
-#include "pdf/base/XojPdfPage.h"                       // for XojPdfPageSPtr
-#include "util/Util.h"                                 // for npos
-#include "util/i18n.h"                                 // for FC, _, _F
+#include "util/i18n.h"                                 // for _
 
 SidebarIndexPage::SidebarIndexPage(Control* control, SidebarToolbar* toolbar):
         AbstractSidebarPage(control, toolbar), iconNameHelper(control->getSettings()) {
@@ -81,47 +75,6 @@ void SidebarIndexPage::disableSidebar() {
     // Nothing to do at the moment
 }
 
-void SidebarIndexPage::askInsertPdfPage(size_t pdfPage) {
-    GtkWidget* dialog = gtk_message_dialog_new(control->getGtkWindow(), GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
-                                               GTK_BUTTONS_NONE, "%s",
-                                               FC(_F("Your current document does not contain PDF Page no {1}\n"
-                                                     "Would you like to insert this page?\n\n"
-                                                     "Tip: You can select Journal → Paper Background → PDF Background "
-                                                     "to insert a PDF page.") %
-                                                  (pdfPage + 1)));
-
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", 1);
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Insert after", 2);
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Insert at end", 3);
-
-    gtk_window_set_transient_for(GTK_WINDOW(dialog), control->getGtkWindow());
-    int res = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-    if (res == 1) {
-        return;
-    }
-
-    size_t position = 0;
-
-    Document* doc = control->getDocument();
-
-    if (res == 2) {
-        position = control->getCurrentPageNo() + 1;
-    } else if (res == 3) {
-        position = doc->getPageCount();
-    }
-
-    doc->lock();
-    XojPdfPageSPtr pdf = doc->getPdfPage(pdfPage);
-    doc->unlock();
-
-    if (pdf) {
-        auto page = std::make_shared<XojPage>(pdf->getWidth(), pdf->getHeight());
-        page->setBackgroundPdfPageNr(pdfPage);
-        control->insertPage(std::move(page), position);
-    }
-}
-
 auto SidebarIndexPage::treeBookmarkSelected(GtkWidget* treeview, SidebarIndexPage* sidebar) -> bool {
     if (sidebar->searchTimeout) {
         return false;
@@ -142,27 +95,7 @@ auto SidebarIndexPage::treeBookmarkSelected(GtkWidget* treeview, SidebarIndexPag
             if (link && link->dest) {
                 LinkDestination* dest = link->dest;
 
-                size_t pdfPage = dest->getPdfPage();
-
-                if (pdfPage != npos) {
-                    Document* doc = sidebar->control->getDocument();
-                    doc->lock();
-                    size_t page = doc->findPdfPage(pdfPage);
-                    doc->unlock();
-
-                    if (page == npos) {
-                        sidebar->askInsertPdfPage(pdfPage);
-                    } else {
-                        if (dest->shouldChangeTop()) {
-                            sidebar->control->getScrollHandler()->scrollToPage(
-                                    page, dest->getTop() * sidebar->control->getZoomControl()->getZoom());
-                        } else {
-                            if (sidebar->control->getCurrentPageNo() != page) {
-                                sidebar->control->getScrollHandler()->scrollToPage(page);
-                            }
-                        }
-                    }
-                }
+                sidebar->control->getScrollHandler()->scrollToLinkDest(*dest);
             }
             g_object_unref(link);
 

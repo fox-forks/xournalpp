@@ -15,6 +15,7 @@
 #include "control/ToolHandler.h"                      // for ToolHandler
 #include "control/layer/LayerController.h"            // for LayerController
 #include "control/settings/Settings.h"                // for Settings
+#include "control/settings/SettingsEnums.h"           // for EmptyLastPageAppendType
 #include "control/shaperecognizer/ShapeRecognizer.h"  // for ShapeRecognizer
 #include "control/tools/InputHandler.h"               // for InputHandler::P...
 #include "control/tools/SnapToGridInputHandler.h"     // for SnapToGridInput...
@@ -23,6 +24,7 @@
 #include "gui/PageView.h"                        // for XojPageView
 #include "gui/XournalView.h"                     // for XournalView
 #include "gui/inputdevices/PositionInputData.h"  // for PositionInputData
+#include "model/Document.h"                      // for Document
 #include "model/Layer.h"                         // for Layer
 #include "model/LineStyle.h"                     // for LineStyle
 #include "model/Stroke.h"                        // for Stroke, STROKE_...
@@ -134,7 +136,7 @@ void StrokeHandler::paintTo(const Point& point) {
                 stroke->setLastPressure(std::max(endPoint.z, point.z) * stroke->getWidth());
             } else {
                 if (const double widthDelta = (point.z - endPoint.z) * stroke->getWidth();
-                    - widthDelta > MAX_WIDTH_VARIATION || widthDelta > MAX_WIDTH_VARIATION) {
+                    -widthDelta > MAX_WIDTH_VARIATION || widthDelta > MAX_WIDTH_VARIATION) {
                     /**
                      * If the width variation is to big, decompose into shorter segments.
                      * Those segments can not be shorter than PIXEL_MOTION_THRESHOLD
@@ -266,11 +268,25 @@ void StrokeHandler::onButtonReleaseEvent(const PositionInputData& pos, double zo
     Layer* layer = page->getSelectedLayer();
 
     UndoRedoHandler* undo = control->getUndoRedoHandler();
-
     undo->addUndoAction(std::make_unique<InsertUndoAction>(page, layer, stroke.get()));
 
-    ToolHandler* h = control->getToolHandler();
+    if (settings->getEmptyLastPageAppend() == EmptyLastPageAppendType::OnDrawOfLastPage) {
+        auto* doc = control->getDocument();
+        doc->lock();
+        auto pdfPageCount = doc->getPdfPageCount();
+        doc->unlock();
+        if (pdfPageCount == 0) {
+            auto currentPage = control->getCurrentPageNo();
+            doc->lock();
+            auto lastPage = doc->getPageCount() - 1;
+            doc->unlock();
+            if (currentPage == lastPage) {
+                control->insertNewPage(currentPage + 1, false);
+            }
+        }
+    }
 
+    ToolHandler* h = control->getToolHandler();
     if (h->getDrawingType() == DRAWING_TYPE_STROKE_RECOGNIZER) {
         ShapeRecognizer reco;
 

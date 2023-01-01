@@ -12,8 +12,10 @@
 
 #include "control/AudioController.h"                             // for Audi...
 #include "control/ClipboardHandler.h"                            // for Clip...
+#include "control/CompassController.h"                           // for Comp...
 #include "control/RecentManager.h"                               // for Rece...
 #include "control/ScrollHandler.h"                               // for Scro...
+#include "control/SetsquareController.h"                         // for Sets...
 #include "control/Tool.h"                                        // for Tool
 #include "control/ToolHandler.h"                                 // for Tool...
 #include "control/jobs/AutosaveJob.h"                            // for Auto...
@@ -50,11 +52,15 @@
 #include "gui/dialog/SettingsDialog.h"                           // for Sett...
 #include "gui/dialog/ToolbarManageDialog.h"                      // for Tool...
 #include "gui/dialog/toolbarCustomize/ToolbarDragDropHandler.h"  // for Tool...
+#include "gui/inputdevices/CompassInputHandler.h"                // for Comp...
+#include "gui/inputdevices/GeometryToolInputHandler.h"           // for Geom...
 #include "gui/inputdevices/HandRecognition.h"                    // for Hand...
+#include "gui/inputdevices/SetsquareInputHandler.h"              // for Sets...
 #include "gui/sidebar/Sidebar.h"                                 // for Sidebar
 #include "gui/toolbarMenubar/ToolMenuHandler.h"                  // for Tool...
 #include "gui/toolbarMenubar/model/ToolbarData.h"                // for Tool...
 #include "gui/toolbarMenubar/model/ToolbarModel.h"               // for Tool...
+#include "model/Compass.h"                                       // for Comp...
 #include "model/Document.h"                                      // for Docu...
 #include "model/DocumentChangeType.h"                            // for DOCU...
 #include "model/Element.h"                                       // for Element
@@ -86,7 +92,9 @@
 #include "util/i18n.h"                                           // for _, FS
 #include "util/serializing/InputStreamException.h"               // for Inpu...
 #include "util/serializing/ObjectInputStream.h"                  // for Obje...
+#include "view/CompassView.h"                                    // for Comp...
 #include "view/SetsquareView.h"                                  // for Sets...
+#include "view/overlays/OverlayView.h"                           // for Over...
 
 #include "CrashHandler.h"                    // for emer...
 #include "FullscreenHandler.h"               // for Full...
@@ -344,7 +352,7 @@ void Control::initWindow(MainWindow* win) {
 
     fireActionSelected(GROUP_SNAPPING, settings->isSnapRotation() ? ACTION_ROTATION_SNAPPING : ACTION_NONE);
     fireActionSelected(GROUP_GRID_SNAPPING, settings->isSnapGrid() ? ACTION_GRID_SNAPPING : ACTION_NONE);
-    fireActionSelected(GROUP_SETSQUARE, ACTION_NONE);
+    fireActionSelected(GROUP_GEOMETRY_TOOL, ACTION_NONE);
 }
 
 auto Control::autosaveCallback(Control* control) -> bool {
@@ -645,23 +653,26 @@ void Control::actionPerformed(ActionType type, ActionGroup group, GtkToolButton*
                 selectTool(TOOL_HAND);
             }
             break;
-        case ACTION_SETSQUARE:
-            if (!this->win->getXournal()->getSetsquareView()) {
-                // bring up setsquare in page center
-                auto setsquare = std::make_unique<Setsquare>();
-                auto view = win->getXournal()->getViewFor(getCurrentPageNo());
-                std::unique_ptr<SetsquareView> setsquareView = std::make_unique<SetsquareView>(view, setsquare);
-                if (!view) {
-                    setsquareView.reset(nullptr);
-                }
-                this->win->getXournal()->setSetsquareView(std::move(setsquareView));
-                fireActionSelected(GROUP_SETSQUARE, ACTION_SETSQUARE);
-            } else {
-                // hide setsquare
-                this->win->getXournal()->resetSetsquareView();
+        case ACTION_SETSQUARE: {
+            bool needsNewSetsquare = !this->geometryToolController ||
+                                     this->geometryToolController->getType() != GeometryToolType::SETSQUARE;
+            resetGeometryTool();
+            if (needsNewSetsquare) {
+                makeGeometryTool<Setsquare, xoj::view::SetsquareView, SetsquareController, SetsquareInputHandler,
+                                 ACTION_SETSQUARE>();
             }
-            win->getXournal()->repaintSetsquare(true);
             break;
+        }
+        case ACTION_COMPASS: {
+            bool needsNewCompass = !this->geometryToolController ||
+                                   this->geometryToolController->getType() != GeometryToolType::COMPASS;
+            resetGeometryTool();
+            if (needsNewCompass) {
+                makeGeometryTool<Compass, xoj::view::CompassView, CompassController, CompassInputHandler,
+                                 ACTION_COMPASS>();
+            }
+            break;
+        }
         case ACTION_TOOL_FLOATING_TOOLBOX:
             if (enabled) {
                 selectTool(TOOL_FLOATING_TOOLBOX);
@@ -878,6 +889,18 @@ void Control::actionPerformed(ActionType type, ActionGroup group, GtkToolButton*
             setFullscreen(enabled);
             break;
 
+        case ACTION_TOGGLE_PAIRS_PARITY: {
+            int pairsOffset = settings->getPairsOffset();
+            bool pairsEnabled = settings->isShowPairedPages();
+            if (pairsOffset % 2 == 0) {
+                setPairsOffset(pairsOffset + 1);
+            } else {
+                setPairsOffset(pairsOffset - 1);
+            };
+            setViewPairedPages(pairsEnabled);
+            break;
+        }
+
         case ACTION_SET_COLUMNS_1:
             setViewColumns(1);
             break;
@@ -1051,6 +1074,30 @@ void Control::actionPerformed(ActionType type, ActionGroup group, GtkToolButton*
             fireActionSelected(GROUP_TOOL, at);
         }
     }
+}
+
+template <class ToolClass, class ViewClass, class ControllerClass, class InputHandlerClass, ActionType a>
+void Control::makeGeometryTool() {
+    const auto view = this->win->getXournal()->getViewFor(getCurrentPageNo());
+    const auto* xournal = GTK_XOURNAL(this->win->getXournal()->getWidget());
+    auto tool = new ToolClass();
+    view->addOverlayView(std::make_unique<ViewClass>(tool, view, zoom));
+    this->geometryTool = std::unique_ptr<GeometryTool>(tool);
+    this->geometryToolController = std::make_unique<ControllerClass>(view, tool);
+    std::unique_ptr<InputHandlerClass> geometryToolInputHandler =
+            std::make_unique<InputHandlerClass>(this->win->getXournal(), geometryToolController.get());
+    geometryToolInputHandler->registerToPool(tool->getHandlerPool());
+    xournal->input->setGeometryToolInputHandler(std::move(geometryToolInputHandler));
+    fireActionSelected(GROUP_GEOMETRY_TOOL, a);
+    geometryTool->notify();
+}
+
+void Control::resetGeometryTool() {
+    this->geometryToolController.reset();
+    this->geometryTool.reset();
+    auto* xournal = GTK_XOURNAL(this->win->getXournal()->getWidget());
+    xournal->input->resetGeometryToolInputHandler();
+    fireActionSelected(GROUP_GEOMETRY_TOOL, ACTION_NONE);
 }
 
 auto Control::copy() -> bool {
@@ -1351,11 +1398,15 @@ void Control::updateDeletePageButton() {
 void Control::deletePage() {
     clearSelectionEndText();
 
-    // if the current page contains the Setsquare, reset it
+    // if the current page contains the geometry tool, reset it
     size_t pNr = getCurrentPageNo();
-    auto setsquareView = win->getXournal()->getSetsquareView();
-    if (setsquareView && doc->indexOf(setsquareView->getPage()) == pNr) {
-        win->getXournal()->resetSetsquareView();
+    if (geometryToolController) {
+        doc->lock();
+        auto page = doc->indexOf(geometryToolController->getPage());
+        doc->unlock();
+        if (page == pNr) {
+            resetGeometryTool();
+        }
     }
     // don't allow delete pages if we have less than 2 pages,
     // so we can be (more or less) sure there is at least one page.
@@ -1400,7 +1451,9 @@ void Control::duplicatePage() {
     insertPage(pageCopy, getCurrentPageNo() + 1);
 }
 
-void Control::insertNewPage(size_t position) { pageBackgroundChangeController->insertNewPage(position); }
+void Control::insertNewPage(size_t position, bool shouldScrollToPage) {
+    pageBackgroundChangeController->insertNewPage(position, shouldScrollToPage);
+}
 
 void Control::appendNewPdfPages() {
     auto pageCount = this->doc->getPageCount();
@@ -1438,7 +1491,7 @@ void Control::appendNewPdfPages() {
     }
 }
 
-void Control::insertPage(const PageRef& page, size_t position) {
+void Control::insertPage(const PageRef& page, size_t position, bool shouldScrollToPage) {
     this->doc->lock();
     this->doc->insertPage(page, position);  // insert the new page to the document and update page numbers
     this->doc->unlock();
@@ -1451,8 +1504,11 @@ void Control::insertPage(const PageRef& page, size_t position) {
 
     // make the inserted page fully visible (or at least as much from the top which fits on the screen),
     // and make the page appear selected
-    scrollHandler->scrollToPage(position);
-    firePageSelected(position);
+    if (shouldScrollToPage) {
+        scrollHandler->scrollToPage(position);
+        firePageSelected(position);
+    }
+
 
     updateDeletePageButton();
     undoRedo->addUndoAction(std::make_unique<InsertDeletePageUndoAction>(page, position, true));
@@ -2235,8 +2291,8 @@ auto Control::openFile(fs::path filepath, int scrollToPage, bool forceOpen) -> b
         parentFolderPath = missingFilePath.parent_path().string();
         filename = missingFilePath.filename().string();
 #else
-        // since POSIX systems detect the whole Windows path as a filename, this checks whether missingFilePath contains
-        // a Windows path
+        // since POSIX systems detect the whole Windows path as a filename, this checks whether missingFilePath
+        // contains a Windows path
         std::regex regex(R"([A-Z]:\\(?:.*\\)*(.*))");
         std::cmatch matchInfo;
 
@@ -2455,6 +2511,7 @@ auto Control::annotatePdf(fs::path filepath, bool /*attachPdf*/, bool attachToDo
         return false;
     }
 
+    // Prompt the user for a path if none is provided.
     if (filepath.empty()) {
         XojOpenDlg dlg(getGtkWindow(), this->settings);
         filepath = dlg.showOpenDialog(true, attachToDocument);
@@ -2463,34 +2520,39 @@ auto Control::annotatePdf(fs::path filepath, bool /*attachPdf*/, bool attachToDo
         }
     }
 
-    this->closeDocument();
-
+    // First, we create a dummy document and load the PDF into it.
+    // We do NOT reset the current document yet because loading could fail.
     getCursor()->setCursorBusy(true);
+    auto newDoc = std::make_unique<Document>(this);
+    newDoc->setFilepath("");
 
-    this->doc->setFilepath("");
-    bool res = this->doc->readPdf(filepath, true, attachToDocument);
-
-    if (res) {
-        RecentManager::addRecentFileFilename(filepath.c_str());
-
-        this->doc->lock();
-        auto filepath = this->doc->getEvMetadataFilename();
-        this->doc->unlock();
-        MetadataEntry md = MetadataManager::getForFile(filepath);
-        loadMetadata(md);
-    } else {
-        this->doc->lock();
-        string errMsg = doc->getLastErrorMsg();
-        this->doc->unlock();
-
-        string msg = FS(_F("Error annotate PDF file \"{1}\"\n{2}") % filepath.u8string() % errMsg);
-        XojMsgBox::showErrorToUser(getGtkWindow(), msg);
-    }
+    const bool res = newDoc->readPdf(filepath, /*initPages=*/true, attachToDocument);
     getCursor()->setCursorBusy(false);
 
-    fireDocumentChanged(DOCUMENT_CHANGE_COMPLETE);
+    if (!res) {
+        // Loading failed, so display the error to the user.
+        newDoc->lock();
+        std::string errMsg = newDoc->getLastErrorMsg();
+        newDoc->unlock();
 
-    getCursor()->updateCursor();
+        std::string msg = FS(_F("Error annotate PDF file \"{1}\"\n{2}") % filepath.u8string() % errMsg);
+        XojMsgBox::showErrorToUser(getGtkWindow(), msg);
+        return false;
+    }
+
+    // Success, so we can close the current document.
+    this->closeDocument();
+    // Then we overwrite the global document with the new document.
+    // FIXME: there could potentially be a data race if a job requires the old document but runs after it is closed
+    {
+        std::lock_guard<Document> lg(*doc);
+        // TODO: allow Document to be moved
+        *doc = *newDoc;
+    }
+
+    // Trigger callbacks and update UI
+    fireDocumentChanged(DOCUMENT_CHANGE_COMPLETE);
+    fileLoaded();
 
     return true;
 }
@@ -2773,7 +2835,7 @@ auto Control::close(const bool allowDestroy, const bool allowCancel) -> bool {
     if (allowDestroy && discard) {
         this->closeDocument();
     }
-    win->getXournal()->resetSetsquareView();
+    resetGeometryTool();
     return true;
 }
 

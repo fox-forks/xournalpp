@@ -1,28 +1,35 @@
 #include "PopplerGlibPage.h"
 
 #include <algorithm>  // for max, min
-#include <cstdlib>    // for abs, ptrdiff_t
-#include <sstream>    // for operator<<, ostringstream, basic_os...
+#include <cstdlib>    // for abs, NULL, ptrdiff_t
+#include <memory>     // for make_unique
+#include <sstream>    // for operator<<, ostringstream, bas...
 
 #include <glib.h>          // for g_free, g_utf8_offset_to_pointer
-#include <poppler-page.h>  // for _PopplerRectangle, poppler_page_get...
-#include <poppler.h>       // for PopplerRectangle, g_object_ref, g_o...
+#include <poppler-page.h>  // for _PopplerRectangle, _PopplerLin...
+#include <poppler.h>       // for PopplerRectangle, g_object_ref
 
-#include "pdf/base/XojPdfPage.h"  // for XojPdfRectangle, XojPdfPageSelectio...
-#include "util/GListView.h"       // for GListView, GListView<>::GListViewIter
+#include "pdf/base/XojPdfAction.h"     // for XojPdfAction
+#include "pdf/base/XojPdfPage.h"       // for XojPdfRectangle, XojPdfPage::Link
+#include "util/GListView.h"            // for GListView, GListView<>::GListV...
+#include "util/raii/CLibrariesSPtr.h"  // for adopt
+#include "util/raii/CairoWrappers.h"   // for CairoRegionSPtr
 
-#include "cairo.h"  // for cairo_region_create, cairo_region_c...
+#include "PopplerGlibAction.h"  // for PopplerGlibAction
+#include "cairo.h"              // for cairo_region_create, cairo_reg...
 
-PopplerGlibPage::PopplerGlibPage(PopplerPage* page): page(page) {
+PopplerGlibPage::PopplerGlibPage(PopplerPage* page, PopplerDocument* parentDoc): page(page), document(parentDoc) {
     if (page != nullptr) {
         g_object_ref(page);
     }
 }
 
-PopplerGlibPage::PopplerGlibPage(const PopplerGlibPage& other): page(other.page) {
+PopplerGlibPage::PopplerGlibPage(const PopplerGlibPage& other): page(other.page), document(other.document) {
     if (page != nullptr) {
         g_object_ref(page);
     }
+
+    document = nullptr;
 }
 
 PopplerGlibPage::~PopplerGlibPage() {
@@ -45,19 +52,22 @@ PopplerGlibPage& PopplerGlibPage::operator=(const PopplerGlibPage& other) {
     if (page != nullptr) {
         g_object_ref(page);
     }
+
+    document = other.document;
+
     return *this;
 }
 
 auto PopplerGlibPage::getWidth() const -> double {
     double width = 0;
-    poppler_page_get_size(page, &width, nullptr);
+    poppler_page_get_size(const_cast<PopplerPage*>(page), &width, nullptr);
 
     return width;
 }
 
 auto PopplerGlibPage::getHeight() const -> double {
     double height = 0;
-    poppler_page_get_size(page, nullptr, &height);
+    poppler_page_get_size(const_cast<PopplerPage*>(page), nullptr, &height);
 
     return height;
 }
@@ -286,4 +296,22 @@ auto PopplerGlibPage::selectTextLines(const XojPdfRectangle& selectRect, XojPdfP
 
     g_assert_nonnull(region);
     return {.region = xoj::util::CairoRegionSPtr(region, xoj::util::adopt), .rects = textRects};
+}
+
+auto PopplerGlibPage::getLinks() -> std::vector<Link> {
+    std::vector<Link> results;
+    const double height = getHeight();
+
+    GList* links = poppler_page_get_link_mapping(this->page);
+    for (GList* l = links; l != NULL; l = g_list_next(l)) {
+        const auto& link = *static_cast<PopplerLinkMapping*>(l->data);
+
+        if (link.action) {
+            XojPdfRectangle rect{link.area.x1, height - link.area.y2, link.area.x2, height - link.area.y1};
+            results.emplace_back(Link{rect, std::make_unique<PopplerGlibAction>(link.action, document)});
+        }
+    }
+    poppler_page_free_link_mapping(links);
+
+    return results;
 }

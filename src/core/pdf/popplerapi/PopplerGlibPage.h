@@ -22,7 +22,7 @@
 
 class PopplerGlibPage: public XojPdfPage {
 public:
-    PopplerGlibPage(PopplerPage* page);
+    PopplerGlibPage(PopplerPage* page, PopplerDocument* doc);
     PopplerGlibPage(const PopplerGlibPage& other);
     virtual ~PopplerGlibPage();
     PopplerGlibPage& operator=(const PopplerGlibPage& other);
@@ -42,9 +42,11 @@ public:
 
     TextSelection selectTextLines(const XojPdfRectangle& rect, XojPdfPageSelectionStyle style) override;
 
+    auto getLinks() -> std::vector<Link> override;
 
     int getPageId() const override;
 
 private:
     PopplerPage* page;
+    PopplerDocument* document;
 };

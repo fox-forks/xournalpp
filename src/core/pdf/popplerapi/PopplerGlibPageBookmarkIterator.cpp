@@ -1,5 +1,6 @@
 #include "PopplerGlibPageBookmarkIterator.h"
 
+#include <poppler-action.h>    // for poppler_action_free
 #include <poppler-document.h>  // for poppler_index_iter_free
 
 #include "pdf/popplerapi/PopplerGlibAction.h"  // for PopplerGlibAction
@@ -41,5 +42,8 @@ auto PopplerGlibPageBookmarkIterator::getAction() -> XojPdfAction* {
         return nullptr;
     }
 
-    return new PopplerGlibAction(action, document);
+    XojPdfAction* result = new PopplerGlibAction(action, document);
+    poppler_action_free(action);  // XojPdfAction does not own action.
+
+    return result;
 }

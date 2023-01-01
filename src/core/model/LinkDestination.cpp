@@ -1,8 +1,8 @@
 #include "LinkDestination.h"
 
-#include <utility>
+#include <utility>  // for move
 
-#include "util/Util.h"
+#include "util/Util.h"  // for npos
 
 struct _LinkDestClass {
     GObjectClass base_class;
@@ -36,16 +36,17 @@ static void link_dest_class_init(XojLinkDestClass* linkClass) {
 
 auto link_dest_new() -> XojLinkDest* { return LINK_DEST(g_object_new(TYPE_LINK_DEST, nullptr)); }
 
-LinkDestination::LinkDestination() {
-    this->page = npos;
-    this->changeLeft = false;
-    this->changeZoom = false;
-    this->changeTop = false;
-    this->zoom = 0;
-    this->left = 0;
-    this->top = 0;
-    this->expand = false;
-}
+LinkDestination::LinkDestination():
+        page(npos),
+        expand(false),
+        left(0),
+        top(0),
+        zoom(0),
+        changeLeft(false),
+        changeZoom(false),
+        changeTop(false),
+        name(""),
+        contents(UnknownType{}) {}
 
 LinkDestination::~LinkDestination() = default;
 
@@ -83,5 +84,16 @@ void LinkDestination::setChangeTop(double top) {
 }
 
 void LinkDestination::setName(std::string name) { this->name = std::move(name); }
+auto LinkDestination::getName() const -> const std::string& { return name; }
 
-auto LinkDestination::getName() -> std::string { return this->name; }
+void LinkDestination::setURI(std::string uri) { this->contents = LinkType{std::move(uri)}; }
+
+auto LinkDestination::isURI() const -> bool { return std::holds_alternative<LinkDestination::LinkType>(contents); }
+
+auto LinkDestination::getURI() const -> std::optional<std::string> {
+    if (auto* t = std::get_if<LinkDestination::LinkType>(&contents)) {
+        return t->uri;
+    } else {
+        return std::nullopt;
+    }
+}

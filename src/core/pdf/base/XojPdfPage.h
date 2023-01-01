@@ -16,9 +16,13 @@
 #include <string>     // for string
 #include <vector>     // for vector
 
+#include <glib.h> // for GURI
 #include <cairo.h>  // for cairo_region_t, cairo_t
 
 #include "util/raii/CairoWrappers.h"
+#include "XojPdfAction.h"
+
+class XojPdfLink;
 
 /// Determines how text is selected on a user action.
 enum class XojPdfPageSelectionStyle : uint8_t {
@@ -49,6 +53,11 @@ public:
     struct TextSelection {
         xoj::util::CairoRegionSPtr region;
         std::vector<XojPdfRectangle> rects;
+    };
+
+    struct Link {
+        XojPdfRectangle bounds;
+        std::unique_ptr<XojPdfAction> action;
     };
 
     virtual double getWidth() const = 0;
@@ -87,6 +96,11 @@ public:
     /// @param style The text selection style
     /// @return The rectangles that cover the text that would be selected.
     virtual TextSelection selectTextLines(const XojPdfRectangle& rect, XojPdfPageSelectionStyle style) = 0;
+
+    /**
+     * @return A list of Links in the current page.
+     */
+    virtual auto getLinks() -> std::vector<Link> = 0;
 
     virtual int getPageId() const = 0;
 

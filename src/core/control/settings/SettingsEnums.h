@@ -47,6 +47,12 @@ enum ScrollbarHideType {
     SCROLLBAR_HIDE_BOTH = SCROLLBAR_HIDE_HORIZONTAL | SCROLLBAR_HIDE_VERTICAL
 };
 
+enum class EmptyLastPageAppendType {
+    Disabled = 0,
+    OnDrawOfLastPage = 1,
+    OnScrollToEndOfLastPage = 2,
+};
+
 /**
  * The user-selectable device types
  */
@@ -118,5 +124,19 @@ constexpr auto iconThemeToString(IconTheme iconTheme) -> const char* {
     }
 }
 
+constexpr auto emptyLastPageAppendToString(EmptyLastPageAppendType appendType) -> const char* {
+    switch (appendType) {
+        case EmptyLastPageAppendType::Disabled:
+            return "disabled";
+        case EmptyLastPageAppendType::OnDrawOfLastPage:
+            return "onDrawOfLastPage";
+        case EmptyLastPageAppendType::OnScrollToEndOfLastPage:
+            return "onScrollOfLastPage";
+        default:
+            return "unknown";
+    }
+}
+
 StylusCursorType stylusCursorTypeFromString(const std::string& stylusCursorTypeStr);
 IconTheme iconThemeFromString(const std::string& iconThemeStr);
+EmptyLastPageAppendType emptyLastPageAppendFromString(const std::string& str);
