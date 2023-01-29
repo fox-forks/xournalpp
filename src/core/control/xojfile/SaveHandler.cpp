@@ -251,7 +251,7 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, con
                 }
             } else {
                 background->setAttrib("domain", "absolute");
-                auto file = Util::getMaybeRelativePath(std::filesystem::current_path() / doc->getPdfFilepath().string(), target.parent_path());
+                auto file = Util::resolveAssetPath(doc->getPdfFilepath().string(), target.parent_path());
                 background->setAttrib("filename", file.string());
             }
         }
@@ -277,7 +277,7 @@ void SaveHandler::visitPage(XmlNode* root, PageRef p, Document* doc, int id, con
             p->getBackgroundImage().setCloneId(id);
         } else {
             background->setAttrib("domain", "absolute");
-            auto file = Util::getMaybeRelativePath(std::filesystem::current_path() / p->getBackgroundImage().getFilepath().string(), target.parent_path());
+            auto file = Util::resolveAssetPath(std::filesystem::current_path() / p->getBackgroundImage().getFilepath().string(), target.parent_path());
             background->setAttrib("filename", file.string());
             p->getBackgroundImage().setCloneId(id);
         }

@@ -118,48 +118,47 @@ TEST(UtilPath, testClearExtensions) {
     EXPECT_EQ(string("/test/asdf.pdf"), b.string());
 }
 
-TEST(UtilPath, getMaybeRelativePath) {
-    auto p = fs::path{};
+TEST(UtilPath, resolveAssetPath) {
+    auto p = fs::path();
 
-    p = Util::getMaybeRelativePath("/dir/file.pdf", "/dir");
-    EXPECT_EQ(string("file.pdf"), p.string());
-
-    p = Util::getMaybeRelativePath("C:\\dir\\file.txt", "/base");
+#if _WIN32
+    // if older absolute paths are opened
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "D:");
     EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
 
-    p = Util::getMaybeRelativePath("C:\\dir\\file.txt", "D:");
-#if _WIN32
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "D:\\base");
     EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
-#else
-    EXPECT_EQ(string("../C:\\dir\\file.txt"), p.string());
-#endif
 
-    p = Util::getMaybeRelativePath("/dir/dir2/file.pdf", "/dir/dir3");
-#if _WIN32
-    EXPECT_EQ(string("..\\dir2\\file.pdf"), p.string());
-#else
-    EXPECT_EQ(string("../dir2/file.pdf"), p.string());
-#endif
-
-    p = Util::getMaybeRelativePath("/dir/dir3/file.pdf", "/");
-#if _WIN32
-    EXPECT_EQ(string("dir\\dir3\\file.pdf"), p.string());
-#else
-    EXPECT_EQ(string("dir/dir3/file.pdf"), p.string());
-#endif
-
-    p = Util::getMaybeRelativePath("C:\\dir\\file.txt", "D:\\base");
-#if _WIN32
-    EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
-#else
-    EXPECT_EQ(string("../C:\\dir\\file.txt"), p.string());
-#endif
-
-    p = Util::getMaybeRelativePath("/dir/file.txt", "C:\\base");
-#if _WIN32
-    auto currentDriveLetter = fs::current_path().root_name().string();
-    EXPECT_EQ(string(currentDriveLetter + "\\dir\\file.txt"), p.string());
-#else
+    p = Util::resolveAssetPath("/dir/file.txt", "D:");
     EXPECT_EQ(string("/dir/file.txt"), p.string());
+
+    p = Util::resolveAssetPath("/dir/file.txt", "D:\\base");
+    EXPECT_EQ(string("/dir/file.txt"), p.string());
+
+    // do not return empty if asset_path is relative
+    p = Util::resolveAssetPath("../dir/file.txt", "D:");
+    EXPECT_TRUE(!p.empty());
+
+    p = Util::resolveAssetPath("../dir/file.txt", "D:\\base");
+    EXPECT_TRUE(!p.empty());
+#else
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "/");
+    EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
+
+    p = Util::resolveAssetPath("C:\\dir\\file.txt", "/base");
+    EXPECT_EQ(string("C:\\dir\\file.txt"), p.string());
+
+    p = Util::resolveAssetPath("/dir/file.txt", "/");
+    EXPECT_EQ(string("dir/file.txt"), p.string());
+
+    p = Util::resolveAssetPath("/dir/file.txt", "/base");
+    EXPECT_EQ(string("../dir/file.txt"), p.string());
+
+    // do not return empty if asset_path is relative
+    p = Util::resolveAssetPath("../dir/file.txt", "/");
+    EXPECT_TRUE(!p.empty());
+
+    p = Util::resolveAssetPath("../dir/file.txt", "/base");
+    EXPECT_TRUE(!p.empty());
 #endif
 }

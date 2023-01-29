@@ -1,7 +1,8 @@
 #include "util/PathUtil.h"
 
-#include <cstdlib>      // for system
-#include <fstream>      // for ifstream, char_traits, basic_ist...
+#include <cstdlib>  // for system
+#include <fstream>  // for ifstream, char_traits, basic_ist...
+#include <iostream>
 #include <iterator>     // for begin
 #include <string_view>  // for basic_string_view, operator""sv
 #include <type_traits>  // for remove_reference<>::type
@@ -313,6 +314,33 @@ bool Util::safeRenameFile(fs::path const& from, fs::path const& to) {
     return true;
 }
 
+auto Util::resolveAssetPath(fs::path const& asset_path, fs::path const& base) -> fs::path {
+    auto final_path = fs::path{};
+
+    std::cout << "path: " << asset_path << '\n';
+    std::cout << "base: " << base << '\n';
+
+#ifdef _WIN32
+    // On Windows, fs::relative may return an empty or malformed path if the
+    // the root_path()s are different
+    if (fullpath.root_path() == base.root_path()) {
+        final_path = fs::relative(asset_path, base);
+    }
+#else
+    // With other platforms, the root is always '/', so a relative path can
+    // always be correctly constructed
+    final_path = fs::relative(asset_path, base);
+#endif
+
+    // In some cases (if `asset_path` is a relative path), `final_path` may be
+    // empty, so ensure that a valid path is always returned from this function
+    if (final_path.empty())
+        final_path = fs::weakly_canonical(asset_path);
+
+    return final_path;
+}
+
+
 auto Util::getDataPath() -> fs::path {
 #ifdef _WIN32
     TCHAR szFileName[MAX_PATH];
@@ -343,25 +371,4 @@ auto Util::getLocalePath() -> fs::path {
 #else
     return getDataPath() / ".." / "locale";
 #endif
-}
-
-auto Util::getMaybeRelativePath(fs::path const& fullpath, fs::path const& base) -> fs::path {
-    auto relpath = fs::path{};
-
-#ifdef _WIN32
-    // On Windows, fs::relative may return an empty or malformed path if the
-    // the root_path()s are different
-    if (fullpath.root_path() == base.root_path()) {
-        relpath = fs::proximate(fullpath, base);
-    }
-#else
-    // With other platforms, the root is always '/', so a relative path can
-    // always be correctly constructed
-    relpath = fs::proximate(fullpath, base);
-#endif
-
-    if (relpath.empty())
-        relpath = fs::weakly_canonical(fullpath);
-
-    return relpath;
 }
